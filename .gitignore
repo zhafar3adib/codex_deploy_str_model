@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+.venv/
+work/
+.streamlit/secrets.toml
+gha-creds-*.json
+model_bundle*.joblib

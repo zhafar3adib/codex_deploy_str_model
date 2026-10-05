@@ -1,0 +1,36 @@
+name: Train STR monthly
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+      timezone: 'Asia/Bangkok'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: str-model-publish
+  cancel-in-progress: false
+jobs:
+  train:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      MODEL_BUCKET: klamby_sales
+      GOOGLE_CLOUD_PROJECT: klamby-469003
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-training.txt
+      - run: python -m pip install -r requirements-training.txt pytest
+      - run: python -m pytest -q
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: '${{ secrets.GCP_TRAINER_SA_JSON }}'
+      - name: Train, validate and publish best_rf_mod
+        run: python train.py --project "$GOOGLE_CLOUD_PROJECT" --bucket "$MODEL_BUCKET" --publish
