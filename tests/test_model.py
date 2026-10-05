@@ -1,7 +1,4 @@
 from datetime import date
-import hashlib
-import io
-import json
 from pathlib import Path
 import shutil
 
@@ -157,8 +154,9 @@ def test_streamlit_form_predictions_and_similar_table(bundle, tmp_path, monkeypa
     app.button[0].click().run()
     assert any('Lengkapi' in x.value for x in app.warning)
     wanted = bundle['training_articles'].iloc[0]
-    for selector, name in zip(app.selectbox, FEATURES):
-        selector.select(str(wanted[name]))
+    selectors = {selector.key: selector for selector in app.selectbox}
+    for name in FEATURES:
+        selectors['input_' + name].select(str(wanted[name]))
     app.button[0].click().run(timeout=30)
     assert not app.exception
     assert len(app.metric) == 5
