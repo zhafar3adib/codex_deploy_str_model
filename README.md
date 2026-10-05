@@ -1,6 +1,6 @@
 # Prediksi STR, stok, dan artikel serupa
 
-Aplikasi Streamlit menggunakan `best_rf_mod = grid_rf.best_estimator_` dari GridSearchCV sesuai notebook terbaru: 324 kombinasi parameter, 5-fold CV, scoring R2, split 70/30 dan random_state 43. Model tetap fit pada X_train, bukan di-refit ke holdout. Encoder mengikuti notebook (fit pada df_reg eligible). Metrik per target disimpan di bundle.
+Aplikasi Streamlit menggunakan `best_rf_mod = grid_rf.best_estimator_` dari GridSearchCV sesuai notebook terbaru: 108 kombinasi parameter, 5-fold CV, scoring R2, split 70/30 dan random_state 43. Model tetap fit pada X_train, bukan di-refit ke holdout. Encoder mengikuti notebook (fit pada df_reg eligible). Metrik per target disimpan di bundle.
 
 ## Perubahan perilaku
 
