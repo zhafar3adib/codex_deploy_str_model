@@ -28,6 +28,8 @@ sample_x = pd.DataFrame(sample_values, columns=encoder.get_feature_names_out(cat
 np.testing.assert_allclose(best_rf_mod.predict(sample_x), best_rf_mod.predict(X_train.iloc[[0]]))
 references = df_articles.loc[X_train.index, ['artikel', 'tanggal']].copy()
 references[cat_cols] = input_df.loc[X_train.index]
+# Historical targets aligned to the same training rows (not predictions).
+references[['stock', 'str30', 'str60', 'str90']] = y_train[['stock', 'str30', 'str60', 'str90']]
 now = datetime.now(ZoneInfo('Asia/Bangkok'))
 metadata = {
     'version': now.strftime('%Y%m%dT%H%M%S') + '-' + uuid4().hex[:8],

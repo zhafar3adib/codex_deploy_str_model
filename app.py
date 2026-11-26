@@ -124,11 +124,20 @@ if submitted:
             if matches.empty:
                 st.info('Belum ada artikel training dengan skor kemiripan di atas 50%.')
             else:
-                shown = matches[['artikel', 'tanggal', 'skor_kemiripan', 'jumlah_sama'] + CHARACTERISTICS].copy()
+                historical = ['stock', 'str30', 'str60', 'str90']
+                if any(column not in matches.columns for column in historical):
+                    st.info('Data stok awal/STR historis belum lengkap pada versi model ini. Jalankan training terbaru lalu aktifkan versinya; nilai yang belum tersedia ditampilkan sebagai —.')
+                shown = matches.reindex(columns=['artikel', 'tanggal', 'skor_kemiripan', 'jumlah_sama']
+                                        + historical + CHARACTERISTICS).copy()
+                shown['stock'] = shown['stock'].map(lambda value: '—' if pd.isna(value) else f'{value:,.0f}')
+                for column in ['str30', 'str60', 'str90']:
+                    shown[column] = shown[column].map(lambda value: '—' if pd.isna(value) else f'{value:.1%}')
+                st.caption('Stok awal dan STR pada tabel adalah nilai historis artikel saat training, bukan hasil prediksi.')
                 shown['tanggal'] = shown['tanggal'].dt.strftime('%Y-%m-%d')
                 shown['skor_kemiripan'] = shown['skor_kemiripan'].map(lambda score: f'{score:.1f}%')
                 shown = shown.rename(columns={**LABELS, 'artikel': 'Artikel', 'tanggal': 'Tanggal launching',
-                    'skor_kemiripan': 'Kemiripan', 'jumlah_sama': 'Atribut sama (dari 9)'})
+                    'skor_kemiripan': 'Kemiripan', 'jumlah_sama': 'Atribut sama (dari 9)',
+                    'stock': 'Stok awal (pcs)', 'str30': 'STR 30 hari', 'str60': 'STR 60 hari', 'str90': 'STR 90 hari'})
                 st.dataframe(shown, hide_index=True, use_container_width=True)
 
 st.caption('Pilihan berasal dari nilai unik df_reg yang lolos filter usia minimal 90 hari; null menjadi 0. Bulan diurutkan Januari–Desember sesuai nilai yang tersedia.')
