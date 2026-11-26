@@ -16,7 +16,8 @@ Aplikasi Streamlit menggunakan `best_rf_mod = grid_rf.best_estimator_` dari Grid
 3. Buat/pakai service account trainer. Beri `roles/bigquery.jobUser` di project `klamby-469003`, `roles/bigquery.dataViewer` di dataset sumber, dan `roles/storage.objectUser` di bucket `klamby_sales`. Jika tabel BigQuery bersumber Google Drive/Sheets, bagikan file sumber ke email service account dengan akses baca. Script meminta scope Drive seperti notebook.
 4. Di repository GitHub: Settings > Secrets and variables > Actions > New repository secret. Isi `GCP_TRAINER_SA_JSON` dengan JSON service account trainer. Jangan commit JSON. Workflow memakai secret ini saat runtime. Untuk penguatan selanjutnya, auth dapat dimigrasikan ke Workload Identity Federation.
 5. Buat service account pembaca dengan `roles/storage.objectViewer` hanya pada bucket. Masukkan JSON-nya ke Streamlit > App settings > Secrets sesuai `.streamlit/secrets.toml.example`; set `MODEL_BUCKET = "klamby_sales"`. Pembaca tidak perlu akses BigQuery.
-6. Di GitHub Actions pilih **Train STR monthly > Run workflow** pada main untuk training pertama. Setelah sukses, aplikasi memuat model baru saat rerun/interaksi berikutnya (pemeriksaan manifest dicache 60 detik). Tidak perlu mengunggah model atau reboot per bulan.
+6. Di GitHub Actions pilih **Train STR monthly > Run workflow** pada main untuk menyimpan kandidat pertama. Training tidak mengubah model aktif.
+7. Pilih **Activate model > Run workflow**. Kosongkan `model_version` untuk melihat daftar versi di halaman Summary hasil run. Jalankan lagi dengan ID versi pilihan untuk mengaktifkannya. Aplikasi memuat model pilihan saat rerun/interaksi setelah cache manifest (60 detik) berakhir.
 
 Jadwal: tanggal 1 setiap bulan pukul 03.17 Asia/Bangkok/WIB. GitHub dapat menunda jadwal. **Pada repository publik, schedule dinonaktifkan GitHub setelah 60 hari tanpa aktivitas repository.** Pantau status Actions; untuk jadwal yang harus terus berjalan tanpa aktivitas repo, gunakan Cloud Scheduler + Cloud Run Job dengan perintah training yang sama. Tidak ada heartbeat atau perubahan commit buatan untuk menghindari aturan ini.
 
@@ -24,11 +25,11 @@ Jadwal: tanggal 1 setiap bulan pukul 03.17 Asia/Bangkok/WIB. GitHub dapat menund
 
 Bundle privat berada di `gs://klamby_sales/str-model/versions/<version>/model_bundle.joblib`; penanda aktif di `str-model/latest.json`. Bundle mencakup model, encoder, dropdown, artikel training, versi library, tanggal cutoff, dan metrik. Artikel/data training tidak di-commit ke repository publik atau diunggah sebagai artifact Actions publik.
 
-Versi baru diaktifkan hanya setelah training, evaluasi finite, pemeriksaan prediksi dan roundtrip serialisasi berhasil. File diunggah terlebih dahulu, baru manifest diganti dengan generation precondition. Kegagalan training/upload mempertahankan manifest lama. Aplikasi mengecek checksum dan versi library sebelum memuat model. Jika pengambilan versi baru gagal, sesi memakai bundle terakhir yang berhasil; untuk sesi baru tersedia fallback bundle lokal lama dengan peringatan yang jelas.
+Training menyimpan bundle dan `candidate.json` per versi setelah evaluasi dan pemeriksaan serialisasi. `latest.json` tidak berubah. Hanya workflow **Activate model** yang mengganti penanda aktif setelah pemeriksaan checksum, versi library, dan prediksi uji berhasil, dengan generation precondition. Kegagalan training/upload/validasi aktivasi mempertahankan manifest lama. Aplikasi mengecek checksum dan versi library sebelum memuat model. Jika pengambilan versi baru gagal, sesi memakai bundle terakhir yang berhasil; untuk sesi baru tersedia fallback bundle lokal lama dengan peringatan yang jelas.
 
 Gate saat ini memeriksa validitas teknis; **belum ada ambang akurasi bisnis atau jaminan model baru lebih baik**. Metrik MAE/MSE/R2 per target dan R2 CV dicatat untuk ditinjau. Training asli tidak dapat diverifikasi sebelum credentials dipasang dan workflow pertama berjalan.
 
-Versi model lama tetap tersimpan untuk rollback. Untuk rollback, arahkan latest.json ke object/generation/checksum dan versi library bundle lama yang cocok. Model bundle menggunakan joblib: hanya muat artifact dari bucket terpercaya ini.
+Versi model lama tetap tersimpan untuk rollback. Jalankan **Activate model** dengan ID versi lama untuk kembali ke versi tersebut. Bundle lama yang belum memiliki candidate.json juga didukung; metadata dibaca dari bundle terpercaya dan diperiksa sebelum aktivasi. Model bundle menggunakan joblib: hanya muat artifact dari bucket terpercaya ini.
 
 ## Menjalankan manual
 
@@ -37,7 +38,16 @@ python -m pip install -r requirements-training.txt
 python train.py --project klamby-469003 --bucket klamby_sales --publish
 ```
 
-Tanpa `--publish`, hasil hanya disimpan ke work/training. Kredensial menggunakan GOOGLE_APPLICATION_CREDENTIALS atau Application Default Credentials. Jalankan `python -m pytest -q` untuk pengujian data sintetis, logika kemiripan, pergantian model, dan UI Streamlit. Tes memakai grid kecil; produksi memakai seluruh grid notebook.
+`--publish` hanya mengunggah kandidat; tidak lagi mengaktifkannya. Tanpa `--publish`, hasil hanya disimpan ke work/training.
+
+```sh
+# Daftar versi (tidak mengubah model aktif):
+python activate_model.py
+# Aktifkan satu versi yang dipilih, tanpa training ulang:
+python activate_model.py --version ID_VERSI
+```
+
+Workflow **Activate model** memakai secret `GCP_TRAINER_SA_JSON` yang sudah ada. Input kosong tidak melakukan aktivasi. Daftar versi menampilkan status aktif dan metrik kandidat baru di Summary; metrik model lama dapat dilihat pada log training aslinya. Aktivasi memerlukan model dengan versi library yang cocok dengan requirements.txt aplikasi. Jika tidak cocok, proses gagal dan model aktif tetap sama. Kredensial menggunakan GOOGLE_APPLICATION_CREDENTIALS atau Application Default Credentials. Jalankan `python -m pytest -q` untuk pengujian data sintetis, logika kemiripan, pergantian model, dan UI Streamlit. Tes memakai grid kecil; produksi memakai seluruh grid notebook.
 
 Untuk Colab, notebook revisi dan export_colab.py memakai best_rf_mod yang sudah dilatih. Jalankan dari awal setelah perubahan filter 90 hari; jangan hanya ekspor objek lama. Export menyertakan referensi baris X_train dan bisa diunggah dengan helper model_store.py. Otomasi bulanan tidak bergantung pada runtime Colab.
 

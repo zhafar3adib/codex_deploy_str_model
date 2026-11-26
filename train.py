@@ -72,7 +72,7 @@ def main():
     parser.add_argument('--project', default='klamby-469003')
     parser.add_argument('--bucket', default='klamby_sales')
     parser.add_argument('--output', default='work/training')
-    parser.add_argument('--publish', action='store_true')
+    parser.add_argument('--publish', action='store_true', help='Upload kandidat ke bucket; tidak mengaktifkan model.')
     args = parser.parse_args()
     # Include Drive scope because the existing BigQuery source can use external Sheets.
     import google.auth
@@ -100,7 +100,7 @@ def main():
         from model_store import publish_bundle
         from google.cloud import storage
         publish_bundle(storage.Client(project=args.project, credentials=credentials), args.bucket, path, bundle['metadata'])
-        print('Model, encoder, dropdown, dan artikel training berhasil diterbitkan.')
+        print('Kandidat tersimpan. Model aktif tidak berubah. Pilih versinya melalui Actions > Activate model.')
 
 
 if __name__ == '__main__':

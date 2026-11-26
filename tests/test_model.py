@@ -1,6 +1,7 @@
 from datetime import date
 from pathlib import Path
 import shutil
+import json
 
 import joblib
 import numpy as np
@@ -9,7 +10,7 @@ import pytest
 
 from model_utils import FEATURES, CHARACTERISTICS, dropdowns, encode, month_options, prepare_data, similar_articles
 from train import train_bundle
-from model_store import MANIFEST, download_bundle, publish_bundle
+from model_store import MANIFEST, download_bundle, publish_bundle, activate_version, list_versions
 
 
 def raw_data():
@@ -119,6 +120,9 @@ class FakeBucket:
     def blob(self, name, generation=None):
         return FakeBlob(self, name, generation)
 
+    def list_blobs(self, bucket_name, prefix):
+        return [self.get_blob(name) for name in self.data if name.startswith(prefix)]
+
     def get_blob(self, name):
         return FakeBlob(self, name, self.data[name][1]) if name in self.data else None
 
@@ -130,6 +134,8 @@ def test_publish_download_and_failed_upload_keeps_pointer(bundle, tmp_path):
     manifest = publish_bundle(bucket, 'test', path, bundle['metadata'])
     restored = download_bundle(bucket, 'test', manifest)
     assert restored['metadata'] == bundle['metadata']
+    assert MANIFEST not in bucket.data
+    activate_version(bucket, 'test', bundle['metadata']['version'])
     previous = bucket.data[MANIFEST]
     bucket.fail_upload = True
     with pytest.raises(RuntimeError):
@@ -162,3 +168,61 @@ def test_streamlit_form_predictions_and_similar_table(bundle, tmp_path, monkeypa
     assert len(app.metric) == 5
     assert len(app.dataframe) == 1
     assert int(app.metric[-1].value) > 0
+
+
+def test_candidate_preserves_active_and_can_rollback(bundle, tmp_path):
+    bucket = FakeBucket()
+    path = tmp_path / 'bundle.joblib'
+    joblib.dump(bundle, path)
+    first = bundle['metadata']['version']
+    publish_bundle(bucket, 'test', path, bundle['metadata'])
+    activate_version(bucket, 'test', first)
+    previous = bucket.data[MANIFEST]
+    second = {**bundle, 'metadata': {**bundle['metadata'], 'version': 'second-version'}}
+    joblib.dump(second, path)
+    publish_bundle(bucket, 'test', path, second['metadata'])
+    assert bucket.data[MANIFEST] == previous
+    listed = list_versions(bucket, 'test')
+    assert len(listed) == 2
+    assert [r['version'] for r in listed if r['active']] == [first]
+    activate_version(bucket, 'test', 'second-version')
+    assert json.loads(bucket.data[MANIFEST][0])['version'] == 'second-version'
+    activate_version(bucket, 'test', first)
+    assert json.loads(bucket.data[MANIFEST][0])['version'] == first
+
+
+def test_legacy_bundle_without_sidecar_can_activate(bundle, tmp_path):
+    bucket = FakeBucket()
+    path = tmp_path / 'bundle.joblib'
+    joblib.dump(bundle, path)
+    name = f"str-model/versions/{bundle['metadata']['version']}/model_bundle.joblib"
+    bucket.blob(name).upload_from_string(path.read_bytes(), 'application/octet-stream', 0)
+    activate_version(bucket, 'test', bundle['metadata']['version'])
+    assert json.loads(bucket.data[MANIFEST][0])['version'] == bundle['metadata']['version']
+
+
+def test_invalid_or_missing_version_does_not_change_pointer(bundle, tmp_path):
+    bucket = FakeBucket()
+    path = tmp_path / 'bundle.joblib'
+    joblib.dump(bundle, path)
+    publish_bundle(bucket, 'test', path, bundle['metadata'])
+    activate_version(bucket, 'test', bundle['metadata']['version'])
+    previous = bucket.data[MANIFEST]
+    for bad in ['../latest.json', 'missing-version', 'bad version', '']:
+        with pytest.raises(ValueError):
+            activate_version(bucket, 'test', bad)
+        assert bucket.data[MANIFEST] == previous
+
+
+def test_corrupt_candidate_does_not_change_pointer(bundle, tmp_path):
+    bucket = FakeBucket()
+    path = tmp_path / 'bundle.joblib'
+    joblib.dump(bundle, path)
+    manifest = publish_bundle(bucket, 'test', path, bundle['metadata'])
+    activate_version(bucket, 'test', bundle['metadata']['version'])
+    previous = bucket.data[MANIFEST]
+    sidecar = f"str-model/versions/{bundle['metadata']['version']}/candidate.json"
+    bucket.data[sidecar] = (json.dumps({**manifest, 'sha256': 'bad'}), 2)
+    with pytest.raises(ValueError, match='Checksum'):
+        activate_version(bucket, 'test', bundle['metadata']['version'])
+    assert bucket.data[MANIFEST] == previous
