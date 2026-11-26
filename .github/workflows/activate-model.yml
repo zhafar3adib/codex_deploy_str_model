@@ -1,0 +1,36 @@
+name: Activate model
+on:
+  workflow_dispatch:
+    inputs:
+      model_version:
+        description: 'ID versi model. Kosongkan untuk menampilkan daftar versi tanpa mengubah model aktif.'
+        required: false
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: str-model-publish
+  cancel-in-progress: false
+jobs:
+  activate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MODEL_BUCKET: klamby_sales
+      GOOGLE_CLOUD_PROJECT: klamby-469003
+      MODEL_VERSION: ${{ inputs.model_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: '${{ secrets.GCP_TRAINER_SA_JSON }}'
+      - name: List versions or activate selected model
+        run: python activate_model.py --project "$GOOGLE_CLOUD_PROJECT" --bucket "$MODEL_BUCKET" --version "$MODEL_VERSION"
