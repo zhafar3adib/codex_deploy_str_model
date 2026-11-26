@@ -52,7 +52,7 @@ def train_bundle(raw, as_of, param_grid=None):
         'encoder': encoder, 'categorical_columns': FEATURES, 'target_columns': TARGETS,
         'feature_columns': list(X.columns), 'dropdown_options': dropdowns(data),
         # Holdout articles must never appear in the similarity table.
-        'training_articles': data.loc[X_train.index, ['artikel', 'tanggal'] + FEATURES].reset_index(drop=True),
+        'training_articles': data.loc[X_train.index, ['artikel', 'tanggal'] + FEATURES + TARGETS].reset_index(drop=True),
         'metadata': {
             'version': now.strftime('%Y%m%dT%H%M%S') + '-' + uuid4().hex[:8],
             'trained_at': now.isoformat(), 'as_of': str(as_of),

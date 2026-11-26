@@ -82,6 +82,9 @@ def test_bundle_uses_best_model_and_training_only(bundle):
     actual = set(bundle['training_articles']['artikel'])
     assert actual == set(eligible.loc[train_idx, 'artikel'])
     assert not actual.intersection(eligible.loc[test_idx, 'artikel'])
+    refs = bundle['training_articles'].set_index('artikel')
+    expected_history = eligible.set_index('artikel').loc[refs.index, ['stock', 'str30', 'str60', 'str90']]
+    pd.testing.assert_frame_equal(refs[expected_history.columns], expected_history)
     assert bundle['model_name'] == 'best_rf_mod'
     assert bundle['model'].get_params()['max_depth'] == 3
     assert bundle['metadata']['training_rows'] == 28
@@ -147,12 +150,18 @@ def test_publish_download_and_failed_upload_keeps_pointer(bundle, tmp_path):
         download_bundle(bucket, 'test', {**manifest, 'library_versions': {'scikit-learn': '0.0'}})
 
 
-def test_streamlit_form_predictions_and_similar_table(bundle, tmp_path, monkeypatch):
+@pytest.mark.parametrize('history_mode', ['full', 'legacy', 'zero'])
+def test_streamlit_form_predictions_and_similar_table(bundle, tmp_path, monkeypatch, history_mode):
     from streamlit.testing.v1 import AppTest
     monkeypatch.delenv('MODEL_BUCKET', raising=False)
     root = Path(__file__).resolve().parents[1]
     for name in ['app.py', 'model_utils.py', 'model_store.py']:
         shutil.copy(root / name, tmp_path / name)
+    bundle = {**bundle, 'training_articles': bundle['training_articles'].copy()}
+    if history_mode == 'legacy':
+        bundle['training_articles'] = bundle['training_articles'].drop(columns=['stock', 'str30', 'str60', 'str90'])
+    elif history_mode == 'zero':
+        bundle['training_articles']['str30'] = 0.0
     joblib.dump(bundle, tmp_path / 'model_bundle.joblib')
     app = AppTest.from_file(str(tmp_path / 'app.py')).run(timeout=30)
     assert not app.exception
@@ -168,6 +177,20 @@ def test_streamlit_form_predictions_and_similar_table(bundle, tmp_path, monkeypa
     assert len(app.metric) == 5
     assert len(app.dataframe) == 1
     assert int(app.metric[-1].value) > 0
+    table = app.dataframe[0].value.set_index('Artikel')
+    columns = ['Stok awal (pcs)', 'STR 30 hari', 'STR 60 hari', 'STR 90 hari']
+    assert all(column in table for column in columns)
+    if history_mode == 'legacy':
+        assert table[columns].eq('—').all().all()
+        assert any('belum lengkap' in message.value for message in app.info)
+    else:
+        references = bundle['training_articles'].set_index('artikel')
+        for article, row in table.iterrows():
+            assert row['Stok awal (pcs)'] == f"{references.loc[article, 'stock']:,.0f}"
+            for target, label in [('str30', 'STR 30 hari'), ('str60', 'STR 60 hari'), ('str90', 'STR 90 hari')]:
+                assert row[label] == f"{references.loc[article, target]:.1%}"
+    if history_mode == 'zero':
+        assert table['STR 30 hari'].eq('0.0%').all()
 
 
 def test_candidate_preserves_active_and_can_rollback(bundle, tmp_path):

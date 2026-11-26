@@ -9,6 +9,10 @@ Aplikasi Streamlit menggunakan `best_rf_mod = grid_rf.best_estimator_` dari Grid
 - Kemiripan = jumlah nilai sama pada sub_kategori, cutting, design_density, design_border, siluet, sleeve, collar, length_hem, color_theme / 9 × 100%. Semua atribut berbobot sama; nilai 0 vs 0 dihitung sama. Bulan tidak dihitung. Hanya >50% (minimal 5 dari 9) ditampilkan. Urutan utama tanggal launching menurun, lalu nama artikel untuk tanggal yang sama. Jumlah dihitung per artikel unik. Referensi hanya baris X_train milik model aktif, tidak termasuk X_test atau produk <90 hari.
 - Rumus STR tetap mengikuti notebook: penjualan mulai 90 hari sebelum tanggal stok awal sampai hari ke-30/60/90 setelahnya, rasio dibatasi maksimal 1. Definisi ini tidak diubah menjadi jendela sejak launching. Prediksi stock tetap estimasi stok awal historis, bukan stok optimal.
 
+Tabel artikel serupa juga menampilkan **Stok awal (pcs), STR 30 hari, STR 60 hari, dan STR 90 hari**. Nilai ini merupakan target historis artikel pada saat training, bukan prediksi. Hanya referensi X_train yang disimpan, selaras dengan identitas artikel. Stok ditampilkan sebagai unit pcs dan STR sebagai persentase; keduanya tidak memengaruhi skor kemiripan.
+
+Bundle lama belum menyimpan empat kolom ini. Aplikasi tetap dapat membukanya, tetapi nilai yang belum tersedia ditampilkan sebagai **—**, bukan nol. Jalankan **Train STR monthly** sekali untuk membuat kandidat dengan histori, lalu pilih kandidat tersebut melalui **Activate model**. Memperbarui kode aplikasi saja tidak mengisi kembali data bundle lama. Ekspor Colab dan notebook juga sudah menyimpan kolom histori ini.
+
 ## Aktivasi satu kali
 
 1. Gabungkan perubahan ke `main`; Streamlit menjalankan `app.py` dengan Python 3.13 dan `requirements.txt` repository.
